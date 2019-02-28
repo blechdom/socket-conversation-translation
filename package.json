@@ -1,0 +1,24 @@
+{
+  "name": "socket-conversation-translation",
+  "version": "0.1.0",
+  "description": "node socket google cloud ai streaming conversation translation demo app",
+  "devDependencies": {
+    "lodash": "^4.6.1",
+    "webpack": "^4.16.5",
+    "webpack-cli": "^3.1.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "build": "rm -rf ./dist && npx webpack client.js"
+  },
+  "dependencies": {
+    "@google-cloud/speech": "^2.2.0",
+    "@google-cloud/text-to-speech": "^0.5.0",
+    "@google-cloud/translate": "^2.1.3",
+    "events": "^3.0.0",
+    "fs": "0.0.1-security",
+    "socket.io": "^2.2.0",
+    "util": "^0.11.1",
+    "yargs": "^12.0.5"
+  }
+}
