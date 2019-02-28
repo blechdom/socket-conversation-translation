@@ -4,26 +4,13 @@ class MessageEmitter extends EventEmitter {}
 const messageEmitter = new MessageEmitter();
 const userListEmitter = new MessageEmitter();
 
-var PROTO_PATH = __dirname + '/conversation_translation.proto';
-
 const io = require("socket.io");
 const SocketServer = io.listen(8082);
 
-var grpc = require('grpc');
 var _ = require('lodash');
 var util = require('util');
 var fs = require('fs');
-var protoLoader = require('@grpc/proto-loader');
-var packageDefinition = protoLoader.loadSync(
-    PROTO_PATH,
-    {keepCase: true,
-     longs: String,
-     enums: String,
-     defaults: true,
-     oneofs: true
-    });
-var protoDescriptor = grpc.loadPackageDefinition(packageDefinition);
-var translate_chat = protoDescriptor.translate_chat;
+
 var call_array = [];
 var user_array = [];
 var sttLanguageCode = '';
@@ -39,107 +26,139 @@ const speech = require('@google-cloud/speech');
 const {Translate} = require('@google-cloud/translate');
 const textToSpeech = require('@google-cloud/text-to-speech');
 
-const client = new speech.SpeechClient();
+const speechClient = new speech.SpeechClient();
 const translate = new Translate();
 const ttsClient = new textToSpeech.TextToSpeechClient();
 
 var voiceList = {};
 
-async function doGetVoiceList(call, callback) {
-  //console.log("getting voice list");
-  const [result] = await ttsClient.listVoices({});
-  voiceList = result.voices;
-  //console.log("result: " + JSON.stringify(result));
-  voiceList.sort(function(a, b) {
-    var textA = a.name.toUpperCase();
-    var textB = b.name.toUpperCase();
-    return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
-  });
-  callback(null, {voicelist: JSON.stringify(voiceList)});
-
-}
-
-async function doJoinChat(call) {
-  var username = call.request.username;
-  var requestID = call.metadata._internal_repr["x-request-id"];
-  var languageName = call.request.languagename;
-
-  user_array.push({
-    userid: requestID[0],
-    username: username,
-    languagename: languageName
-  });
-
-  var joinMessage = {
-    message: username + " joined the conversation",
-    messageID: requestID[0],
-    messageLangCode: 'en',
-    senderID: requestID[0],
-    senderName: username,
-    messageType: "update"
-  };
-
-  console.log(username + " joined the conversation with ID: " + requestID[0]);
-
-  console.log("number joined: " + user_array.length);
-
-  messageEmitter.on('chatMessage', function(chatMessage) {
-
-    //translate chatMessage Here
-    async function runTranslation() {
-      ttsLanguageCode = call.request.translatelanguagecode; //en-EN-standard-B
-      translateLanguageCode = ttsLanguageCode.substring(0, 2); //en
-      sttLanguageCode = ttsLanguageCode.substring(0, 5); //en-US
-
-      console.log('translating into: ' + ttsLanguageCode);
-      var request = {
-        // Select the language and SSML Voice Gender (optional)
-        voice: {languageCode: ttsLanguageCode, ssmlGender: 'NEUTRAL'},
-        // Select the type of audio encoding
-        audioConfig: {audioEncoding: 'MP3'},
-      };
-      var target = translateLanguageCode;
-      var text = chatMessage.message;
-      let [translations] = await translate.translate(text, target);
-      translations = Array.isArray(translations) ? translations : [translations];
-      var translation_concatenated = "";
-      translations.forEach((translation, i) => {
-        translation_concatenated += translation + " ";
-      });
-      // Construct the request
-      request.input= {text: translation_concatenated};
-      console.log('tts config: ' + JSON.stringify(request));
-      async function tts(){
-        const [response] = await ttsClient.synthesizeSpeech(request);
-
-        const writeFile = util.promisify(fs.writeFile);
-        await writeFile('audio/' + chatMessage.messageID + '_' + requestID[0] + '.mp3', response.audioContent, 'binary');
-        console.log('Audio content written to file: ' + chatMessage.messageID + '_' + requestID[0] + '.mp3');
-
-        call.write({
-          receiverid: requestID[0],
-          senderid: chatMessage.senderID,
-          sendername: chatMessage.senderName,
-          message: translation_concatenated,
-          messageid: chatMessage.messageID,
-          users: user_array,
-          messagetype: chatMessage.messageType
-        });
-        console.log(`${target}) ${translation_concatenated}`);
-      }
-      tts();
-    }
-    runTranslation();
-  });
-  messageEmitter.emit('chatMessage', joinMessage);
-}
-
 SocketServer.on("connection", function(socket) {
 
   socket.on('binaryStream', function(data) {
+
     if(recognizeStream!=null) {
       recognizeStream.write(data);
     }
+
+  });
+  socket.on('getVoiceList', function(data) {
+    console.log("getting voice list");
+    async function getList(){
+      const [result] = await ttsClient.listVoices({});
+      voiceList = result.voices;
+      //console.log("result: " + JSON.stringify(result));
+      voiceList.sort(function(a, b) {
+        var textA = a.name.toUpperCase();
+        var textB = b.name.toUpperCase();
+        return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
+      });
+    //  callback(null, {voicelist: JSON.stringify(voiceList)});
+      socket.emit('voicelist', JSON.stringify(voiceList));
+
+    }
+    getList();
+  });
+  socket.on('joinChat', function(data) {
+    async function doJoinChat() {
+      var username = data.username;
+      var requestID = Math.random().toString(36).substr(2, 9);
+      var languageName = data.languageName;
+
+      user_array.push({
+        userid: requestID,
+        username: username,
+        languagename: languageName
+      });
+
+      var joinMessage = {
+        message: username + " joined the conversation",
+        messageID: requestID,
+        messageLangCode: 'en',
+        senderID: requestID,
+        senderName: username,
+        messageType: "update"
+      };
+
+      console.log(username + " joined the conversation with ID: " + requestID);
+
+      console.log("number joined: " + user_array.length);
+
+      messageEmitter.on('chatMessage', function(chatMessage) {
+
+        //translate chatMessage Here
+        async function runTranslation() {
+          ttsLanguageCode = data.translateLanguageCode; //en-EN-standard-B
+          translateLanguageCode = ttsLanguageCode.substring(0, 2); //en
+          sttLanguageCode = ttsLanguageCode.substring(0, 5); //en-US
+
+          console.log('translating into: ' + ttsLanguageCode);
+          var request = {
+            // Select the language and SSML Voice Gender (optional)
+            voice: {languageCode: ttsLanguageCode, ssmlGender: 'NEUTRAL'},
+            // Select the type of audio encoding
+            audioConfig: {audioEncoding: 'MP3'},
+          };
+          var target = translateLanguageCode;
+          var text = chatMessage.message;
+          let [translations] = await translate.translate(text, target);
+          translations = Array.isArray(translations) ? translations : [translations];
+          var translation_concatenated = "";
+          translations.forEach((translation, i) => {
+            translation_concatenated += translation + " ";
+          });
+          // Construct the request
+          request.input= {text: translation_concatenated};
+          console.log('tts config: ' + JSON.stringify(request));
+          async function tts(){
+            const [response] = await ttsClient.synthesizeSpeech(request);
+
+            const writeFile = util.promisify(fs.writeFile);
+            await writeFile('audio/' + chatMessage.messageID + '_' + requestID[0] + '.mp3', response.audioContent, 'binary');
+            console.log('Audio content written to file: ' + chatMessage.messageID + '_' + requestID[0] + '.mp3');
+
+
+            var messageObject = {
+              receiverid: requestID,
+              senderid: chatMessage.senderID,
+              sendername: chatMessage.senderName,
+              message: translation_concatenated,
+              messageid: chatMessage.messageID,
+              users: user_array,
+              messagetype: chatMessage.messageType
+            };
+            socket.emit('receiveMessage', messageObject);
+            console.log(`${target}) ${translation_concatenated}`);
+          }
+          tts();
+        }
+        runTranslation();
+      });
+      messageEmitter.emit('chatMessage', joinMessage);
+    }
+    doJoinChat();
+  });
+  socket.on('sendMessage', function(data) {
+
+      var newMessage = data.message;
+      var senderID = data.senderid;
+      var senderName = data.sendername;
+      var messageID = Math.random().toString(36).substr(2, 9);
+      var chatMessage = {
+        message: newMessage,
+        messageID: messageID,
+        senderID: senderID,
+        senderName: senderName,
+        messageType: "message"
+      };
+      console.log("message received: " + JSON.stringify(chatMessage));
+      try {
+        messageEmitter.emit('chatMessage', chatMessage);
+      } catch(err) {
+        console.error('caught while emitting:', err.message);
+      }
+      socket.emit("messageStatus", {status: "message-received"});
+      //callback(null, {status: "message-received"});
+
   });
 });
 
@@ -158,7 +177,7 @@ function startStreaming(sttLanguage) {
       interimResults: true
   };
 
-  recognizeStream = client
+  recognizeStream = speech
     .streamingRecognize(request)
     .on('error', (error) => {
       console.error;
@@ -195,27 +214,6 @@ function stopStreaming(){
 function restartStreaming(){
   stopStreaming();
   startStreaming();
-}
-
-function doSendMessage(call, callback) {
-  var newMessage = call.request.message;
-  var senderID = call.request.senderid;
-  var senderName = call.request.sendername;
-  var messageID = call.metadata._internal_repr["x-request-id"];
-  var chatMessage = {
-    message: newMessage,
-    messageID: messageID[0],
-    senderID: senderID,
-    senderName: senderName,
-    messageType: "message"
-  };
-  console.log("message received: " + JSON.stringify(chatMessage));
-  try {
-    messageEmitter.emit('chatMessage', chatMessage);
-  } catch(err) {
-    console.error('caught while emitting:', err.message);
-  }
-  callback(null, {status: "message-received"});
 }
 
 function doPlayAudioFile(call) {
@@ -277,25 +275,25 @@ function doLeaveChat(call, callback) {
 }
 
 function getServer() {
-  var server = new grpc.Server();
-  console.log("getting server");
-  server.addService(translate_chat.TranslateChat.service, {
-    getVoiceList: doGetVoiceList,
-    joinChat: doJoinChat,
-    sendMessage: doSendMessage,
-    leaveChat: doLeaveChat,
-    transcribeAudioStream: doTranscribeAudioStream,
-    playAudioFile: doPlayAudioFile,
-    stopAudioStream: doStopAudioStream
-  });
+  //var server = new grpc.Server();
+  //console.log("getting server");
+  //server.addService(translate_chat.TranslateChat.service, {
+  //  getVoiceList: doGetVoiceList,
+  //  joinChat: doJoinChat,
+  //  sendMessage: doSendMessage,
+  //  leaveChat: doLeaveChat,
+  //  transcribeAudioStream: doTranscribeAudioStream,
+  //  playAudioFile: doPlayAudioFile,
+  //  stopAudioStream: doStopAudioStream
+  //});
   console.log("Chat Server Started");
   return server;
 }
 
 if (require.main === module) {
   var server = getServer();
-  server.bind('0.0.0.0:9090', grpc.ServerCredentials.createInsecure());
-  server.start();
+  //server.bind('0.0.0.0:9090', grpc.ServerCredentials.createInsecure());
+  //server.start();
 }
 
 exports.getServer = getServer;

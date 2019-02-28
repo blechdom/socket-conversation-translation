@@ -33,7 +33,7 @@ window.onload = function(){
   var AudioContext; // = window.AudioContext || window.webkitAudioContext;
   var context;
 
-  const { JoinChatRequest,
+  /*const { JoinChatRequest,
           JoinChatResponse,
           SendMessageRequest,
           SendMessageResponse,
@@ -48,17 +48,20 @@ window.onload = function(){
           VoiceListRequest,
           VoiceListResponse
         } = require('./conversation_translation_pb.js');
+*/
+//  const {TranslateChatClient} = require('./conversation_translation_grpc_web_pb.js');
 
-  const {TranslateChatClient} = require('./conversation_translation_grpc_web_pb.js');
+//  var client = new TranslateChatClient('http://' + window.location.hostname + ':8080', null, null);
 
-  var client = new TranslateChatClient('http://' + window.location.hostname + ':8080', null, null);
+//  var voiceListRequest = new VoiceListRequest();
+  //voiceListRequest.setLoaded(true);
+  socket.emit('getVoiceList', 1);
+  socket.on('voicelist', function(data) {
+    console.log("getting voicelist");
+  //});
+  //client.getVoiceList(voiceListRequest, {}, (err, response) => {
 
-  var voiceListRequest = new VoiceListRequest();
-  voiceListRequest.setLoaded(true);
-
-  client.getVoiceList(voiceListRequest, {}, (err, response) => {
-    
-    var voicelist = JSON.parse(response.getVoicelist());
+    var voicelist = JSON.parse(data);
 
     var voiceListOptions = '';
 
@@ -94,30 +97,36 @@ window.onload = function(){
 
     if(myUsername&&translateLang){
 
-      var joinChatRequest = new JoinChatRequest();
+      var chatID = {
+        username: myUsername,
+        translateLanguageCode: translateLang,
+        languageName: myLanguageName,
+      };
+      socket.emit("joinChat", chatID);
+      //var joinChatRequest = new JoinChatRequest();
 
-      joinChatRequest.setUsername(myUsername);
-      joinChatRequest.setTranslatelanguagecode(translateLang);
-      joinChatRequest.setLanguagename(myLanguageName);
+      //joinChatRequest.setUsername(myUsername);
+      //joinChatRequest.setTranslatelanguagecode(translateLang);
+      //joinChatRequest.setLanguagename(myLanguageName);
 
 
-      var chatStream = client.joinChat(joinChatRequest, {});
+      //var chatStream = client.joinChat(joinChatRequest, {});
 
       joinDiv.innerHTML = "";
       chatDiv.style.visibility = "visible";
       joinBool = false;
 
-      chatStream.on('data', (response) => {
+      socket.on('receiveMessage', function(response) {
 
-        receiverID = response.getReceiverid();
-        senderID = response.getSenderid();
-        var senderName = response.getSendername();
-        var messageType = response.getMessagetype();
-        var newMessage = response.getMessage();
-        var newMessageID = response.getMessageid();
+        receiverID = response.receiverid;
+        senderID = response.senderid;
+        var senderName = response.sendername;
+        var messageType = response.messagetype;
+        var newMessage = response.message;
+        var newMessageID = response.messageid;
         var messageAudio = newMessageID + '_' + receiverID + '.mp3';
 
-        usernames = response.getUsersList();
+        usernames = response.users;
 
         var formattedMessage = "";
         if(messageType==="update"){
@@ -140,12 +149,11 @@ window.onload = function(){
         for (var i=0; i< usernames.length; i++){
           var user = usernames[i];
           var activeChatDiv = '<div class="chat_list">';
-          if(senderID===user.getUserid()){
-            	activeChatDiv = '<div class="chat_list active_chat">';
+          if(senderID===user.userid){
+            activeChatDiv = '<div class="chat_list active_chat">';
           }
-          usernameList.innerHTML += activeChatDiv + '<div class="chat_people"><div class="chat_ib"><h5>' + user.getUsername() + '</h5><p>' + user.getLanguagename() + '</div></div></div>';
+          usernameList.innerHTML += activeChatDiv + '<div class="chat_people"><div class="chat_ib"><h5>' + user.username + '</h5><p>' + user.languagename + '</div></div></div>';
         }
-
       });
     }
     else {
@@ -167,14 +175,19 @@ window.onload = function(){
 
   messageSend.onclick = function() {
     if(messageInput.value){
-      var request = new SendMessageRequest();
-      request.setMessage(messageInput.value);
-      request.setSenderid(receiverID);
-      request.setSendername(myUsername);
+      //var request = new SendMessageRequest();
+      //request.setMessage(messageInput.value);
+      //request.setSenderid(receiverID);
+      //request.setSendername(myUsername);
+      var sendMessageObject = {
+        message: messageInput.value,
+        senderid: receiverID,
+        sendername: myUsername
+      };
+      socket.emit('sendMessage', sendMessageObject);
+      //client.sendMessage(request, {}, (err, response) => {
 
-      client.sendMessage(request, {}, (err, response) => {
-
-      });
+      //});
       concatText = '';
       newText = '';
       messageInput.value = '';
@@ -212,19 +225,19 @@ window.onload = function(){
     AudioContext = window.AudioContext || window.webkitAudioContext;
     context = new AudioContext();
 
-    var request = new AudioStreamRequest();
+    //var request = new AudioStreamRequest();
 
-    request.setStart(true);
-    request.setSttlanguagecode(mySTTLang);
+    //request.setStart(true);
+    //request.setSttlanguagecode(mySTTLang);
 
-    var stream = client.transcribeAudioStream(request, {});
+    //var stream = client.transcribeAudioStream(request, {});
     messageInput.value = "";
     concatText = "";
     newText = "";
-    stream.on('data', (response) => {
-      newText = response.getTranscript();
+    socket.on('getTranscript', function (response) {
+      newText = response.transcript;
       messageInput.value = concatText + newText;
-      if (response.getIsfinal()){
+      if (response.isfinal){
         messageSend.click();
         concatText += " " + newText;
       }
@@ -281,13 +294,14 @@ window.onload = function(){
     		AudioContext = null;
     	});
     }
-    var request = new StopStreamRequest();
+    //var request = new StopStreamRequest();
 
-    request.setStop(true);
+    //request.setStop(true);
 
-    client.stopAudioStream(request, {}, (err, response) => {
+    socket.emit('stopStreaming', true);
+    //client.stopAudioStream(request, {}, (err, response) => {
 
-    });
+    //});
   }
   var downsampleBuffer = function (buffer, sampleRate, outSampleRate) {
       if (outSampleRate == sampleRate) {
@@ -331,22 +345,22 @@ window.onload = function(){
     AudioContext = window.AudioContext || window.webkitAudioContext;
     context = new AudioContext();
 
-    var playAudioRequest = new PlayAudioFileRequest();
-    playAudioRequest.setAudiofilename(audioName);
-    var playStream = client.playAudioFile(playAudioRequest, {});
+    //var playAudioRequest = new PlayAudioFileRequest();
+    //playAudioRequest.setAudiofilename(audioName);
+    //var playStream = client.playAudioFile(playAudioRequest, {});
 
     var base64_mp3 = '';
 
-    playStream.on('data', (response) => {
+    //playStream.on('data', (response) => {
 
-      base64_mp3 += response.getAudiodata_asB64();
+    //  base64_mp3 += response.getAudiodata_asB64();
 
-    });
-    playStream.on('status', function(status) {
-      if (status.code===0){
-        playAudioBuffer(base64_mp3);
-      }
-    });
+    //});
+    //playStream.on('status', function(status) {
+    //  if (status.code===0){
+    //    playAudioBuffer(base64_mp3);
+    //  }
+    //});
   }
   function playAudioBuffer(base64_mp3){
     var audioFromString = base64ToBuffer(base64_mp3);
@@ -377,11 +391,11 @@ window.onload = function(){
     if (streamStreaming) {
       stopStreaming();
     }
-    var request = new LeaveChatRequest();
-    request.setSenderid(receiverID);
-    request.setUsername(myUsername);
-    client.leaveChat(request, {}, (err, response) => {
-    });
+    //var request = new LeaveChatRequest();
+    //request.setSenderid(receiverID);
+    //request.setUsername(myUsername);
+    //client.leaveChat(request, {}, (err, response) => {
+    //});
   });
 };
 
