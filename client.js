@@ -81,52 +81,51 @@ window.onload = function(){
       joinDiv.innerHTML = "";
       chatDiv.style.visibility = "visible";
       joinBool = false;
-
-      socket.on('receiveMessage', function(response) {
-
-        receiverID = response.receiverid;
-        senderID = response.senderid;
-        var senderName = response.sendername;
-        var messageType = response.messagetype;
-        var newMessage = response.message;
-        var newMessageID = response.messageid;
-        var messageAudio = newMessageID + '_' + receiverID + '.mp3';
-
-        usernames = response.users;
-
-        var formattedMessage = "";
-        if(messageType==="update"){
-          messageHistory.innerHTML = '<div class="update_chat rotate"><p class="update_chat">' + newMessage + '</p></div>' + messageHistory.innerHTML;
-        }
-        else if(messageType=="error"){
-          messageHistory.innerHTML = '<div class="update_chat danger rotate"><p class="update_chat">ERROR: ' + newMessage + '</p></div>' + messageHistory.innerHTML;
-        }
-        else if(receiverID===senderID){
-          messageHistory.innerHTML = '<div class="outgoing_msg rotate"><div class="sent_msg"><p>' + newMessage + '</p></div><div></div></div>' + messageHistory.innerHTML;
-        }
-        else {
-          messageHistory.innerHTML = '<div class="incoming_msg rotate"><div class="received_msg"><div class="received_withd_msg"><p><b>' + senderName + ':</b> ' + newMessage + '</p></div></div></div>' + messageHistory.innerHTML;
-          createEventListener(newMessageID, messageAudio);
-        }
-
-        messageInput.value = "";
-        usernameList.innerHTML = "";
-
-        for (var i=0; i< usernames.length; i++){
-          var user = usernames[i];
-          var activeChatDiv = '<div class="chat_list">';
-          if(senderID===user.userid){
-            activeChatDiv = '<div class="chat_list active_chat">';
-          }
-          usernameList.innerHTML += activeChatDiv + '<div class="chat_people"><div class="chat_ib"><h5>' + user.username + '</h5><p>' + user.languagename + '</div></div></div>';
-        }
-      });
     }
     else {
       alert("Incomplete Join Information, please enter username and select all three language codes!");
     }
   }
+  socket.on('receiveMessage', function(response) {
+    console.log(JSON.stringify(response));
 
+    receiverID = response.receiverid;
+    senderID = response.senderid;
+    var senderName = response.sendername;
+    var messageType = response.messagetype;
+    var newMessage = response.message;
+    var newMessageID = response.messageid;
+    var messageAudio = newMessageID + '_' + receiverID + '.mp3';
+
+    usernames = response.users;
+
+    var formattedMessage = "";
+    if(messageType==="update"){
+      messageHistory.innerHTML = '<div class="update_chat rotate"><p class="update_chat">' + newMessage + '</p></div>' + messageHistory.innerHTML;
+    }
+    else if(messageType=="error"){
+      messageHistory.innerHTML = '<div class="update_chat danger rotate"><p class="update_chat">ERROR: ' + newMessage + '</p></div>' + messageHistory.innerHTML;
+    }
+    else if(receiverID===senderID){
+      messageHistory.innerHTML = '<div class="outgoing_msg rotate"><div class="sent_msg"><p>' + newMessage + '</p></div><div></div></div>' + messageHistory.innerHTML;
+    }
+    else {
+      messageHistory.innerHTML = '<div class="incoming_msg rotate"><div class="received_msg"><div class="received_withd_msg"><p><b>' + senderName + ':</b> ' + newMessage + '</p></div></div></div>' + messageHistory.innerHTML;
+      createEventListener(newMessageID, messageAudio);
+    }
+
+    messageInput.value = "";
+    usernameList.innerHTML = "";
+
+    for (var i=0; i< usernames.length; i++){
+      var user = usernames[i];
+      var activeChatDiv = '<div class="chat_list">';
+      if(senderID===user.userid){
+        activeChatDiv = '<div class="chat_list active_chat">';
+      }
+      usernameList.innerHTML += activeChatDiv + '<div class="chat_people"><div class="chat_ib"><h5>' + user.username + '</h5><p>' + user.languagename + '</div></div></div>';
+    }
+  });
   addEventListener("keyup", function(event) {
     if (event.keyCode === 13) {
       if (joinBool) {
@@ -191,7 +190,7 @@ window.onload = function(){
     concatText = "";
     newText = "";
     socket.on('getTranscript', function (response) {
-      console.log("getting transcript");
+
       newText = response.transcript;
       messageInput.value = concatText + newText;
       if (response.isfinal){
@@ -330,7 +329,7 @@ window.onload = function(){
   window.addEventListener('beforeunload', function(event) {
     console.log("before unload");
     if (streamStreaming) {
-    //  stopStreaming();
+      stopStreaming();
     }
     var leaveChatObject = {
       senderid: receiverID,

@@ -169,7 +169,6 @@ h5 {
 
 .received_withd_msg p {
 	background: #ebebeb none repeat scroll 0 0;
-	border-radius: 0 15px 15px 15px;
 	color: #646464;
 	font-size: 14px;
 	margin: 0;
@@ -201,8 +200,7 @@ h5 {
 }
 
 .sent_msg p {
-	background:DodgerBlue;
-	border-radius: 15px 15px 0px 15px;
+	background:#646464;
 	font-size: 14px;
 	margin: 0;
 	color: #fff;
